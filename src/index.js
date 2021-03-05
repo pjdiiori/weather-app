@@ -1,54 +1,38 @@
 import React from 'react';
 import ReactDOM from 'react-dom';
 import './index.css';
-const axios = require('axios');
-const usCities = require('./cities/usCities.json');
-
+import { Typeahead } from 'react-bootstrap-typeahead';
+import axios from 'axios';
+import usCities from './cities/usCities.json';
 
 function Button(props){
     return (
-        <button onClick={props.onClick} className="btn btn-lg btn-outline-secondary" type="button" id="button-addon2">
+        <button
+            onClick={props.onClick}
+            className="btn btn-lg btn-outline-secondary"
+            type="button"
+            id="button-addon2"
+        >
             weather me
         </button>
     )
 }
 
-function LocationInput(props){
-    return (
-        <input onKeyDown={props.onKeyDown} onInput={props.onInput} type="text" className="form-control" placeholder="Where are you located?"/>
-    )
-}
-
 function findCity(input){
     let cityObj;
-    if(input.toLowerCase() === 'dc'){
-        usCities.forEach(city => {
-            if(city.state === 'DC'){
-                cityObj = city;
-            }
-        })
-    } else if(input.includes(',')){
-        usCities.forEach(city => {
-            let match = `${city.name.toLowerCase()},${city.state.toLowerCase()}`
-            if(input.replace(', ',',').toLowerCase() === match){
-                cityObj = city;
-            }
-        })
-    } else {
-        usCities.forEach(city => {
-            if(input.toLowerCase() === city.name.toLowerCase()){
-                cityObj = city;
-            }
-        })
-    }
+    usCities.forEach(city => {
+        if(input === city.id){
+            cityObj = city;
+        }
+    })
     return cityObj ? cityObj : false
 }
 
 
-async function fetchForecast(city){
+async function fetchForecast(cityID){
     try {
         const APIkey = ***REMOVED***;
-        const response = await axios.get(`http://api.openweathermap.org/data/2.5/weather?id=${city.id}&units=imperial&appid=${APIkey}`)
+        const response = await axios.get(`http://api.openweathermap.org/data/2.5/weather?id=${cityID}&units=imperial&appid=${APIkey}`)
         
         const sunRiseSet = (time) => {
             const shift = response.data.timezone === -21600 ? 0 : response.data.timezone - -21600;
@@ -67,50 +51,63 @@ async function fetchForecast(city){
 
     } catch (error) {
         if (error.request) {
-            console.log(error.request.response);
+            return 'error'
         } else if (error.response) {
-            console.log(error.response);
+            return 'error'
         } else {
-            console.log(error);
+            return 'error'
         }
     }
 }
 
 
 class WeatherApp extends React.Component {
+    constructor(props){
+        super(props);
+        this.input = React.createRef();
+    }
     state = {
-        display: false,
+        foundCity: false,
         isLoaded: false,
-        foundCity: true,
     }
 
     displayToggle = async () => {
-        const foundCity = findCity(this.state.searchedFor);
-        if(foundCity) {
-            let forecast = await fetchForecast(foundCity)
-            this.setState({
-                foundCity: foundCity,
-                display: true,
-                weatherData: forecast,
-                isLoaded: true,
-            });
-        } else this.setState({foundCity: false});
+        const forecast = await fetchForecast(this.state.searchedFor)
+        this.setState({
+            isLoaded: true,
+            foundCity: findCity(this.state.searchedFor),
+            weatherData: forecast,
+        })
     }
 
-    locationHandler = (input) => this.setState({searchedFor: input.target.value})
+    locationHandler = (input) => {
+        if(input.length !== 0){
+            this.setState({searchedFor: input[0].id})
+        }
+    };
 
-    pressedEnter = (event) => event.key === "Enter" ? this.displayToggle() : null
+    get cities(){
+        return usCities.map((city) => {return {id: city.id, label: `${city.name}, ${city.state}`}})
+    }
 
     render(){
         return (
             <div>
-                <div className="input-group input-group-lg">
-                    <LocationInput onInput={this.locationHandler} onKeyDown={this.pressedEnter} />
+                <div className="input-group input-group-lg flex-nowrap">
+                    <Typeahead
+                        autoFocus={true}
+                        align='left'
+                        id="citySearch"
+                        onChange={this.locationHandler}
+                        placeholder="eg: New Orleans, LA"
+                        options={this.cities}
+                        minLength={1}
+                    />
                     <div className="input-group-append">
                         <Button onClick={this.displayToggle} />
                     </div>
                 </div>
-                <WeatherDisplay displayState={this.state} weatherData={this.state.weatherData} />
+                <WeatherDisplay data={this.state} />
             </div>
         )
     }
@@ -118,22 +115,16 @@ class WeatherApp extends React.Component {
 
 class WeatherDisplay extends React.Component {
     render(){
-        const {weatherData} = this.props
-        const {display, isLoaded, foundCity} = this.props.displayState
+        const {foundCity, weatherData, isLoaded} = this.props.data;
         
-        if(!foundCity){
-            return (
-                <div className={"alert alert-danger"}>
-                    <i className="text-muted">Sorry, couldn't find that location</i>
-                </div>
-            )
-        } else {
-            if(isLoaded){
-                return <FormattedDisplay foundCity={foundCity} weatherData={weatherData} />
-            } else if(display){
-                return <p>Loading...</p>
-            } else return null;
+        if(weatherData === 'error'){
+            return <div className="alert alert-danger"><i>Sorry, couldn't find that city</i></div>
         }
+        if(foundCity){
+            if(!isLoaded) {
+                return <div className="text-muted"><i>Loading...</i></div>
+            } else return <FormattedDisplay foundCity={foundCity} weatherData={weatherData} />
+        } else return null;
     }
 }
 
@@ -154,6 +145,7 @@ const colors = {
     "Drizzle":'primary',
     "Squall":'primary',
 }
+const compass = ["north","northeast","east","southeast","south","southwest","west","northwest","north"]
 
 class FormattedDisplay extends React.Component {
     state = {
@@ -165,10 +157,7 @@ class FormattedDisplay extends React.Component {
     celsius = (temp) => Math.round((temp - 32) * 5/9);
     temp = (temp) => this.state.unit === 'F' ? temp.toFixed() : this.celsius(temp).toFixed()
     
-    get icon() {
-        const { icon } = this.props.weatherData.weather[0]
-        return `http://openweathermap.org/img/wn/${icon}@4x.png`
-    }
+    get icon() {return `http://openweathermap.org/img/wn/${this.props.weatherData.weather[0].icon}@4x.png`}
     
     get bgColor() {
         const { description, main } = this.props.weatherData.weather[0]
@@ -182,7 +171,6 @@ class FormattedDisplay extends React.Component {
         const { description } = this.props.weatherData.weather[0];
         const {sunrise, sunset} = weatherData.sys;
         const {deg, speed} = weatherData.wind;
-        const compass = ["north","northeast","east","southeast","south","southwest","west","northwest","north"]
         
         return (
             <div id="weatherAlert" className={`alert alert-${this.bgColor}`} role="alert">
@@ -221,7 +209,7 @@ class FormattedDisplay extends React.Component {
                         </div>
                         <i className="text-muted">{weatherData.name}{state === 'DC' ? '' : ', '+state}</i>
                     </div>
-                    <div className="col">
+                    <div className="col" id="img-col">
                         <img src={this.icon}></img>
                     </div>
                 </div>
