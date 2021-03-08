@@ -4,19 +4,9 @@ import './index.css';
 import { Typeahead } from 'react-bootstrap-typeahead';
 import axios from 'axios';
 import usCities from './cities/usCities.json';
+import { DateTime } from 'luxon';
 
-function Button(props){
-    return (
-        <button
-            onClick={props.onClick}
-            className="btn btn-lg btn-outline-secondary"
-            type="button"
-            id="button-addon2"
-        >
-            weather me
-        </button>
-    )
-}
+
 
 function findCity(input){
     let cityObj;
@@ -33,21 +23,21 @@ async function fetchForecast(cityID){
     try {
         const APIkey = ***REMOVED***;
         const response = await axios.get(`http://api.openweathermap.org/data/2.5/weather?id=${cityID}&units=imperial&appid=${APIkey}`)
-        
+        const { wind, sys, timezone } = response.data;
+        const { deg, speed } = wind
+        const { sunrise, sunset } = sys
+
         const sunRiseSet = (time) => {
-            const shift = response.data.timezone === -21600 ? 0 : response.data.timezone - -21600;
-            return new Date((time + shift) * 1000).toLocaleTimeString().slice(0,4)
+            const shift = timezone - DateTime.local().offset*60;
+            return DateTime.fromSeconds(time + shift).toLocaleString(DateTime.TIME_SIMPLE);
         }
 
-        let { deg, speed } = response.data.wind
-        let { sunrise, sunset } = response.data.sys
+        wind.deg = Math.round(deg/45)
+        wind.speed = Math.round(speed)
+        sys.sunrise = sunRiseSet(sunrise)
+        sys.sunset = sunRiseSet(sunset)
 
-        response.data.wind.deg = Math.round(deg/45)
-        response.data.wind.speed = Math.round(speed)
-        response.data.sys.sunrise = sunRiseSet(sunrise)+'AM'
-        response.data.sys.sunset = sunRiseSet(sunset)+'PM'
-
-        return response.data
+        return response.data;
 
     } catch (error) {
         if (error.request) {
@@ -104,7 +94,14 @@ class WeatherApp extends React.Component {
                         minLength={1}
                     />
                     <div className="input-group-append">
-                        <Button onClick={this.displayToggle} />
+                        <button
+                            onClick={this.displayToggle}
+                            className="btn btn-lg btn-outline-secondary"
+                            type="button"
+                            id="button-addon2"
+                        >
+                            weather me
+                        </button>
                     </div>
                 </div>
                 <WeatherDisplay data={this.state} />
@@ -165,9 +162,10 @@ class FormattedDisplay extends React.Component {
     }
     
     render(){
-        const {state} = this.props.foundCity
-        const { weatherData } = this.props
-        const {feels_like, humidity, temp} = weatherData.main
+        const {state} = this.props.foundCity;
+        const { weatherData } = this.props;
+        const { name } = weatherData;
+        const {feels_like, humidity, temp} = weatherData.main;
         const { description } = this.props.weatherData.weather[0];
         const {sunrise, sunset} = weatherData.sys;
         const {deg, speed} = weatherData.wind;
@@ -202,12 +200,12 @@ class FormattedDisplay extends React.Component {
                             <label className="alert alert-light">Details: </label>
                             <ul>
                                 <li>Humidity: {humidity}%</li>
-                                <li>Sunrise: {sunrise}</li>
-                                <li>Sunset: {sunset}</li>
+                                <li title={`${name} time`}>Sunrise: {sunrise}</li>
+                                <li title={`${name} time`}>Sunset: {sunset}</li>
                                 <li>Wind blowing {compass[deg]} at {speed}mph</li>
                             </ul>
                         </div>
-                        <i className="text-muted">{weatherData.name}{state === 'DC' ? '' : ', '+state}</i>
+                        <i className="text-muted">{name}{state === 'DC' ? '' : ', '+state}</i>
                     </div>
                     <div className="col" id="img-col">
                         <img src={this.icon}></img>
