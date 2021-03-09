@@ -21,7 +21,7 @@ function findCity(input){
 
 async function fetchForecast(cityID){
     try {
-        const APIkey = ***REMOVED***;
+        const APIkey = process.env.REACT_APP_API_KEY;
         const response = await axios.get(`http://api.openweathermap.org/data/2.5/weather?id=${cityID}&units=imperial&appid=${APIkey}`)
         const { wind, sys, timezone } = response.data;
         const { deg, speed } = wind
@@ -154,7 +154,10 @@ class FormattedDisplay extends React.Component {
     celsius = (temp) => Math.round((temp - 32) * 5/9);
     temp = (temp) => this.state.unit === 'F' ? temp.toFixed() : this.celsius(temp).toFixed()
     
-    get icon() {return `http://openweathermap.org/img/wn/${this.props.weatherData.weather[0].icon}@4x.png`}
+    get icon() {
+        const { icon } = this.props.weatherData.weather[0];
+        return `http://openweathermap.org/img/wn/${icon}@4x.png`;
+    }
     
     get bgColor() {
         const { description, main } = this.props.weatherData.weather[0]
